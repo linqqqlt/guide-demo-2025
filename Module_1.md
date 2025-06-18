@@ -4,7 +4,7 @@
 
 ### Настройка имени хоста
 
-**ISP:**
+**Все Alt-подобные:**
 ```bash
 /etc/hostname
 ```
@@ -33,6 +33,8 @@ BOOTPROTO=static
 ```
 
 **На HQ-CLI, HQ-SRV, BR-SRV добавить маршрут по умолчанию:**
+
+Путь: `/etc/net/ifaces/ens*/ipv4route`
 ```bash
 default via <ip-адрес_шлюза>
 ```
@@ -184,7 +186,7 @@ ip ospf authentication
 ip ospf authentication-key P@ssw0rd
 ```
 
-**Примечание:** Настроить passive interface где необходимо.
+
 
 ### BR-RTR
 
@@ -198,6 +200,8 @@ int tunnel.52
 ip ospf authentication
 ip ospf authentication-key P@ssw0rd
 ```
+
+**Примечание:** Настроить passive interface где необходимо
 
 ## 1.7 Настройка NAT
 
