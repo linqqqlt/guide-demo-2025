@@ -263,7 +263,7 @@ apt-get install bind9
 
 ### Настройка зон
 
-Файл: `/etc/bind/named.conf.local`
+Файл: `/etc/bind/rfc1912.conf `
 
 ```bind
 zone "au-team.irpo" {
@@ -345,4 +345,10 @@ moodle  IN  CNAME  ISP.au-team.irpo.
 ```bash
 apt-get install tzdata
 timedatectl set-timezone Europe/Moscow
+```
+
+На роутерах:
+
+```bash
+ntp timezone utc+3
 ```
