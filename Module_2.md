@@ -8,6 +8,7 @@
 apt-get install task-samba-dc
 rm -f /etc/samba/smb.conf
 rm -rf /var/lib/samba /var/cache/samba
+mkdir –p /var/lib/samba/sysvol
 ```
 
 ```bash
@@ -22,7 +23,7 @@ samba-tool domain provision
 - Server forward: `77.88.8.8`
 
 ```bash
-systemctl enable --now smbd
+systemctl enable --now samba
 ```
 
 ### Настройка DNS зон
