@@ -181,20 +181,21 @@ file "16.172. in-addr.arpa";
 allow-update { none; };
 
 16.172.in-addr.arpa
-----------------------------------
+
+>
      IN  NS  HQ-SRV.au-team.irpo.
 4.1  IN  NS  HQ-RTR.au-team.irpo.
-----------------------------------
 
 168.192.in-addr.arpa
---------------------------------------
+
+>
         IN  NS   HQ-SRV.au-team.irpo.
 100.10  IN  PTR  HQ-SRV.au-team.irpo.
 200.10  IN  PTR  HQ-CLI.au-team.irpo.
--------------------------------------
 
 Au-team.irpo
--------------------------------------
+
+>
         IN  NS  HQ-SRV.au-team.irpo.
 HQ-SRV  IN  A  192.168.100.10
 BR-SRV  IN  A  192.168.10.10
@@ -204,7 +205,6 @@ BR-RTR  IN  A  172.16.5.1
 ISP     IN  A  172.16.4.1
 wiki    IN  CNAME  ISP.au-team.irpo.
 moodle  IN  CNAME  ISP.au-team.irpo.
-------------------------------------
 
 # **1.10 Timezone**
 
