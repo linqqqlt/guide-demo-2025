@@ -10,7 +10,7 @@
 | **Модуль 2** | Дополнительные сервисы | [Перейти к модулю](./Module_2.md) |
 
 ### Сеть с адресацией для более удобного представления
-<img width="633" height="815" alt="Screenshot 2026-02-26 125636" src="https://github.com/user-attachments/assets/409bd66c-39c0-4109-bbca-37aad601e71d" />
 
 
 
+<img width="633" height="815" alt="Screenshot 2026-02-26 125636" src="https://github.com/user-attachments/assets/62487bf6-e1f3-4d00-ab7a-b77db49f4a03" />
