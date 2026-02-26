@@ -55,17 +55,24 @@ service-instance to-cli
 encapsulation dot1q 200 exact
 rewrite pop 1
 
+service-instance vl999
+encapsulation dot1q 999 exact
+rewrite pop 1
+
 interface to-isp
 connect port te0 service-instance to-isp
-ip address 172.16.4.2/28
+ip address 172.16.1.2/28
 
 interface to-srv
 connect port te1 service-instance to-srv
-ip address 192.168.100.1/26
+ip address 192.168.100.1/27
 
 interface to-cli
 connect port te1 service-instance to-cli
-ip address 192.168.200.1/28
+ip address 192.168.200.1/24
+
+interface vl999
+ip address 192.168.99.1/29
 ```
 
 ### Настройка BR-RTR
@@ -81,11 +88,11 @@ encapsulation untagged
 
 interface to-isp
 connect port te0 service-instance to-isp
-ip address 172.16.5.2/28
+ip address 172.16.2.2/28
 
 interface to-srv
 connect port te1 service-instance to-srv
-ip address 192.168.10.1/27
+ip address 192.168.0.1/28
 ```
 
 ## 1.2 Настройка ISP
@@ -118,9 +125,11 @@ role admin
 
 ```bash
 adduser sshuser
-# пароль задается при выполнении команды
+# пароль задается при выполнении команды или же с помощью
+passwd sshuser
+
 usermod -u 1010 sshuser
-usermod -aG sudo sshuser
+usermod -aG wheel sshuser
 ```
 
 ### Настройка sudo
@@ -129,9 +138,9 @@ usermod -aG sudo sshuser
 visudo
 ```
 
-Изменить строку на:
+Найти строку с группой WHEEL и раскоментировать ее:
 ```
-%sudo ALL=(ALL) NOPASSWD: ALL
+%WHEEL ALL=(ALL) NOPASSWD: ALL
 ```
 
 ## 1.4 Настройка SSH
@@ -140,7 +149,7 @@ visudo
 
 Файл: `/etc/openssh/sshd_config`
 ```
-Port 2024
+Port 2026
 AllowUsers sshuser
 Banner /etc/openssh/banner
 ```
@@ -157,17 +166,17 @@ Authorized access only
 ### HQ-RTR
 
 ```bash
-int tunnel.52
+int tunnel.1
 ip address 10.0.0.1/30
-ip tunnel 172.16.4.2 172.16.5.2 mode gre
+ip tunnel 172.16.1.2 172.16.2.2 mode gre
 ```
 
 ### BR-RTR
 
 ```bash
-int tunnel.52
+int tunnel.1
 ip address 10.0.0.2/30
-ip tunnel 172.16.5.2 172.16.4.2 mode gre
+ip tunnel 172.16.2.2 172.16.1.2 mode gre
 ```
 
 ## 1.6 Настройка OSPF
@@ -176,12 +185,11 @@ ip tunnel 172.16.5.2 172.16.4.2 mode gre
 
 ```bash
 router ospf 1
-network 192.168.100.0/26 area 52
-network 192.168.200.0/28 area 52
+network 192.168.100.0/27 area 0
+network 192.168.200.0/24 area 0
 network 10.0.0.0/30 area 0
-area 0 authentication
 
-int tunnel.52
+int tunnel.1
 ip ospf authentication
 ip ospf authentication-key P@ssw0rd
 ```
@@ -192,9 +200,8 @@ ip ospf authentication-key P@ssw0rd
 
 ```bash
 router ospf 1
-network 192.168.10.0/27 area 52
+network 192.168.0.0/28 area 0
 network 10.0.0.0/30 area 0
-area 0 authentication
 
 int tunnel.52
 ip ospf authentication
@@ -209,7 +216,7 @@ ip ospf authentication-key P@ssw0rd
 
 ```bash
 ip nat pool NAT 192.168.100.1-192.168.100.20,192.168.200.1-192.168.200.20
-ip nat source dynamic inside pool NAT overload interface to-isp
+ip nat source dynamic inside-to-outside pool NAT overload interface to-isp
 
 int to-isp
 ip nat outside
@@ -219,13 +226,16 @@ ip nat inside
 
 int to-srv
 ip nat inside
+
+int vl999
+ip nat inside
 ```
 
 ### BR-RTR
 
 ```bash
-ip nat pool NAT 192.168.10.1-192.168.10.20
-ip nat source dynamic inside pool NAT overload interface to-isp
+ip nat pool NAT 192.168.0.1-192.168.0.20
+ip nat source dynamic inside-to-outside pool NAT overload interface to-isp
 
 int to-isp
 ip nat outside
@@ -239,13 +249,13 @@ ip nat inside
 ### Создание пула и сервера
 
 ```bash
-ip pool DHCP 192.168.200.10-192.168.200.20
+ip pool DHCP 192.168.200.1-192.168.200.20
 
 dhcp-server 1
 pool DHCP 1
-mask 28
+mask 24
 gateway 192.168.200.1
-dns 192.168.100.10
+dns 192.168.100.1
 domain-name au-team.irpo
 domain-search au-team.irpo
 ```
@@ -262,7 +272,7 @@ dhcp-server 1
 ### Установка BIND
 
 ```bash
-apt-get install bind9
+apt-get install bind9 bind-utils -y 
 ```
 
 ### Настройка зон
@@ -276,70 +286,97 @@ zone "au-team.irpo" {
     allow-update { none; };
 };
 
-zone "168.192.in-addr.arpa" {
+zone "100.168.192.in-addr.arpa" {
     type master;
-    file "168.192.in-addr.arpa";
+    file "100.168.192.in-addr.arpa";
     allow-update { none; };
 };
 
-zone "16.172.in-addr.arpa" {
+zone "200.168.192.in-addr.arpa" {
     type master;
-    file "16.172.in-addr.arpa";
+    file "200.168.192.in-addr.arpa";
     allow-update { none; };
 };
 ```
+#### Копируете файлы зоны, которые уже есть в каталоге /etc/bind/zone, меняя им названия:
 
-### Файл зоны: 16.172.in-addr.arpa
+```bash
+cp /etc/bind/zone/empty /var/lib/bind/etc/zone/au-team.irpo
+cp /etc/bind/zone/empty /var/lib/bind/etc/zone/100.168.192.in-addr.arpa
+cp /etc/bind/zone/empty /var/lib/bind/etc/zone/200.168.192.in-addr.arpa
+```
+
+### Файл зоны: 100.168.192.in-addr.arpa
 
 ```bind
 $TTL 86400
-@       IN  SOA HQ-SRV.au-team.irpo. admin.au-team.irpo. (
+@       IN  SOA au-team.irpo. root.au-team.irpo. (
             2023010101  ; Serial
             3600        ; Refresh
             1800        ; Retry
             604800      ; Expire
             86400       ; Minimum TTL
 )
-        IN  NS  HQ-SRV.au-team.irpo.
-4.1     IN  PTR HQ-RTR.au-team.irpo.
+        IN  NS  au-team.irpo.
+1       IN  PTR hq-rtr.au-team.irpo.
+2       IN  PTR hq-srv.au-team.irpo.
 ```
 
-### Файл зоны: 168.192.in-addr.arpa
+### Файл зоны: 200.168.192.in-addr.arpa
 
 ```bind
 $TTL 86400
-@       IN  SOA HQ-SRV.au-team.irpo. admin.au-team.irpo. (
+@       IN  SOA au-team.irpo. root.au-team.irpo. (
             2023010101  ; Serial
             3600        ; Refresh
             1800        ; Retry
             604800      ; Expire
             86400       ; Minimum TTL
 )
-        IN  NS   HQ-SRV.au-team.irpo.
-100.10  IN  PTR  HQ-SRV.au-team.irpo.
-200.10  IN  PTR  HQ-CLI.au-team.irpo.
+        IN  NS   au-team.irpo.
+1       IN  PTR  hq-rtr.au-team.irpo.
+2       IN  PTR  hq-cli.au-team.irpo.
 ```
 
 ### Файл зоны: au-team.irpo
 
 ```bind
 $TTL 86400
-@       IN  SOA HQ-SRV.au-team.irpo. admin.au-team.irpo. (
+@       IN  SOA au-team.irpo. root.au-team.irpo. (
             2023010101  ; Serial
             3600        ; Refresh
             1800        ; Retry
             604800      ; Expire
             86400       ; Minimum TTL
 )
-        IN  NS  HQ-SRV.au-team.irpo.
-HQ-SRV  IN  A   192.168.100.10
-BR-SRV  IN  A   192.168.10.10
-HQ-CLI  IN  A   192.168.200.10
-HQ-RTR  IN  A   172.16.4.2
-BR-RTR  IN  A   172.16.5.2
-ISP     IN  A   172.16.4.1
-wiki    IN  CNAME  ISP.au-team.irpo.
-moodle  IN  CNAME  ISP.au-team.irpo.
+        IN  NS  au-team.irpo.
+        IN  A   192.168.100.2
+hq-srv  IN  A   192.168.100.2
+hq-cli  IN  A   192.168.200.2
+hq-rtr  IN  A   192.168.100.1
+hq-rtr  IN  A   192.168.200.1
+hq-rtr  IN  A   192.168.99.1
+docker  IN  A   172.16.1.1
+web     IN  A   172.16.2.1
+br-srv  IN  A   192.168.0.2
+br-rtr  IN  A   192.168.0.1
+```
+
+#### После всех этих настроек главное прописать 2 команды и перезагрузить сервис
+
+```bash
+rndc-confgen > /var/lib/bind/etc/rndc.key
+sed -i ‘6,$d’ /var/lib/bind/etc/rndc.key
+
+systemctl enable --now bind.service
+systemctl restart bind.service
+```
+
+### Поменять nameserver в файле /etc/resolv.conf
+
+```bash
+search au-team.irpo
+nameserver 192.168.100.2
 ```
 
 ## 1.10 Настройка часового пояса
