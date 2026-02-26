@@ -8,7 +8,7 @@
 ## Содержание
 Гайд был переделан под текущие данные и задания ДЕМО 2026 года по данным с сайта https://sysahelper.ru/course/view.php?id=42
 
-</img width="633" height="815" alt="Screenshot 2026-02-26 125636" src="https://github.com/user-attachments/assets/409bd66c-39c0-4109-bbca-37aad601e71d" />
+<img width="633" height="815" alt="Screenshot 2026-02-26 125636" src="https://github.com/user-attachments/assets/409bd66c-39c0-4109-bbca-37aad601e71d" />
 
 ### Модули настройки
 
