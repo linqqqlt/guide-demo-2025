@@ -4,89 +4,60 @@
 
 ### Установка и первоначальная настройка
 
+### 1. Контроллер домена Samba DC на BR-SRV
+
+**Установка:**
 ```bash
-apt-get install task-samba-dc
-rm -f /etc/samba/smb.conf
-rm -rf /var/lib/samba /var/cache/samba
-mkdir –p /var/lib/samba/sysvol
+apt-get install task-samba-dc -y
 ```
 
+**Подготовка:**
+```bash
+rm -f /etc/samba/smb.conf
+rm -rf /var/lib/samba /var/cache/samba
+mkdir -p /var/lib/samba/sysvol
+```
+
+**Провизионирование:**
 ```bash
 samba-tool domain provision
 ```
-
-**Параметры конфигурации:**
-- Realm: `AU-TEAM.IRPO`
-- Domain: `AU-TEAM`
-- Server role: `dc`
-- DNS backend: `SAMBA_INTERNAL`
-- Server forward: `77.88.8.8`
+- Realm: **AU-TEAM.IRPO**
+- Domain: **AU-TEAM**
+- Server Role: **dc**
+- DNS backend: **SAMBA_INTERNAL**
+- DNS forwarder: **77.88.8.8**
 
 ```bash
 systemctl enable --now samba
 ```
 
-### Настройка DNS зон
-
-**Создание обратных зон:**
-```bash
-samba-tool dns zonecreate 192.168.10.10 168.192.in-addr.arpa
-samba-tool dns zonecreate 192.168.10.10 16.172.in-addr.arpa
-```
-
-**Добавление записей:**
-```bash
-samba-tool dns add 192.168.10.10 au-team.irpo HQ-RTR A 172.16.4.2 -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 16.172.in-addr.arpa 4.2 PTR HQ-RTR -U Administrator%P@ssw0rd
-
-samba-tool dns add 192.168.10.10 au-team.irpo BR-RTR A 172.16.5.2 -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 16.172.in-addr.arpa 5.2 PTR BR-RTR -U Administrator%P@ssw0rd
-
-samba-tool dns add 192.168.10.10 au-team.irpo HQ-SRV A 192.168.100.10 -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 168.192.in-addr.arpa 100.10 PTR HQ-SRV -U Administrator%P@ssw0rd
-
-samba-tool dns add 192.168.10.10 au-team.irpo HQ-CLI A 192.168.200.10 -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 168.192.in-addr.arpa 200.10 PTR HQ-CLI -U Administrator%P@ssw0rd
-
-samba-tool dns add 192.168.10.10 au-team.irpo ISP A 172.16.4.1 -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 16.172.in-addr.arpa 4.1 PTR ISP -U Administrator%P@ssw0rd
-
-samba-tool dns add 192.168.10.10 au-team.irpo moodle CNAME ISP -U Administrator%P@ssw0rd
-samba-tool dns add 192.168.10.10 au-team.irpo wiki CNAME ISP -U Administrator%P@ssw0rd
-```
-
-### Создание пользователей и групп
-
 **Создание пользователей:**
 ```bash
-samba-tool user create user1.hq P@ssw0rd && samba-tool user setexpiry user1.hq
-samba-tool user create user2.hq P@ssw0rd && samba-tool user setexpiry user2.hq
-samba-tool user create user3.hq P@ssw0rd && samba-tool user setexpiry user3.hq
-samba-tool user create user4.hq P@ssw0rd && samba-tool user setexpiry user4.hq
-samba-tool user create user5.hq P@ssw0rd && samba-tool user setexpiry user5.hq
+for i in 1 2 3 4 5; do
+    samba-tool user create hquser${i} P@ssw0rd
+    samba-tool user setexpiry hquser${i} --noexpiry
+done
 ```
 
-**Создание группы и добавление пользователей:**
+**Создание группы:**
 ```bash
 samba-tool group add hq
-samba-tool group addmembers hq user1.hq
-samba-tool group addmembers hq user2.hq
-samba-tool group addmembers hq user3.hq
-samba-tool group addmembers hq user4.hq
-samba-tool group addmembers hq user5.hq
+for i in 1 2 3 4 5; do
+    samba-tool group addmembers hq hquser${i}
+done
 ```
 
-### Настройка прав пользователей на HQ-CLI
-
-Файл: `/etc/sudoers`
+**Ввод HQ-CLI в домен:**
 ```bash
-%hq ALL=(ALL) NOPASSWD: /bin/cat,/bin/grep,/usr/bin/id
-%hq ALL=(ALL) !ALL
+# На HQ-CLI:
+apt-get install task-auth-ad-sssd -y
+system-auth write ad au-team.irpo AU-TEAM BR-SRV.au-team.irpo administrator P@ssw0rd
 ```
 
-Альтернативный вариант:
-```bash
-%AU-TEAM.IRPO\\hq ALL=(ALL) NOPASSWD: /bin/cat,/bin/grep,/usr/bin/id
+**Права группы hq на HQ-CLI (visudo):**
+```
+%hq ALL=(ALL) NOPASSWD: /bin/cat, /bin/grep, /usr/bin/id
 ```
 
 ## 2.2 Файловое хранилище
@@ -128,6 +99,7 @@ chmod 777 /raid5/nfs
 ```
 /raid5/nfs 192.168.200.0/28(rw,sync,no_subtree_check,no_root_squash)
 ```
+**тут айпишник сети клиента, то есть то КУДА мы раздаем диск сетевой**
 
 ```bash
 exportfs -a
@@ -185,170 +157,209 @@ systemctl enable --now chronyd
 server 172.16.4.1
 ```
 
-Альтернативно:
-```
-server isp.au-team.irpo
+## 5. Ansible
+```bash
+apt-get update && apt-get install –y ansible sshpass 
 ```
 
-## 2.4 MediaWiki в Docker
-
-### Установка Docker
+Файл : `vim /etc/ansible/hosts`
 
 ```bash
-apt-get install docker-engine docker-compose -y
+[Servers ]
+HQ-SRV ansible_host=192.168.100.2
+
+[Routers]
+HQ-RTR ansible_host=10.10.10.1
+BR-RTR ansible_host=192.168.0.1
+
+[Clients]
+HQ-CLI ansible_host=192.168.200.2
+
+[Servers : vars ]
+ansible_user=sshuser
+ansible_password=Pessw0rd
+ansible_port=2026
+
+[Routers : vars ]
+ansible_user=net_admin
+ansible_password=Pessw0rd
+ansible_conect ion=network_cli
+ansible_network_os=ios
+
+[Clients :vars ]
+ansible_user=user
+ansible_password=resu
+
+[all :vars]
+ansible_python_interpreter=/usr/bin/python3
+```
+
+`vim /etc/ansible/ansible.cfg`
+
+```bash
+[defaults]
+
+inventory = /etc/ansible/hosts
+ost_key_checking = False
+```
+
+`apt-get install –y python3-module-pip
+pip3 install ansible-pylibssh
+`
+### HQ-RTR, BR-RTR
+
+`security none`
+
+### BR-SRV
+
+`ansible -m ping all`
+
+**ЕСЛИ ПИНГ НА КАКОЕ-ТО УСТРОЙСТВО НЕ ПОШЛО ПРОВЕРЬ НАСТРОЙКИ SSH НА УСТРОЙСТВАХ И В ФАЙЛЕ `vim/etc/ansible/hosts`**
+
+## 8. Проброс портов
+
+### HQ-RTR
+
+```
+hq-rtr(config)#ip nat source static tcp 192.168.100.2 80 172.16.1.2 8080
+hq-rtr(config)#ip nat source static tcp 192.168.100.2 2026 172.16.1.2 2026
+hq-rtr(config)#write memory
+```
+
+```
+br-rtr(config)#ip nat source static tcp 192.168.0.2 8080 172.16.2.2 8080
+br-rtr(config)#ip nat source static tcp 192.168.0.2 2026 172.16.2.2 2026
+br-rtr(config)#write memory
+```
+
+## 6. Веб приложение
+
+### BR-SRV
+
+```bash
+apt-get install –y docker-engine docker-compose-v2
 systemctl enable --now docker.service
+mount /dev/sr0 /mnt/
+docker load < /mnt/docker/site_latest.tar
+docker load < /mnt/docker/mariadb_latest.tar
 ```
 
-### Создание конфигурации Docker Compose
+Файл: `vim compose.yaml`
+```bash
+services :
+database:
+conta iner_name: db
+image: mar iadb : 10.11
+restart: always
+ports:
+- "3306:3306"
+environment :
+MARIADB_DATABASE: "testdb"
+MARIADB_USER: "testc"
+MARIADB_PASSWORD: "Pessw0rd"
+MARIADB_ROOT_PASSWORD: "toor"
 
-Файл: `/home/user/wiki.yml`
-```yaml
-version: '3.8'
-
-services:
-  wiki:
-    image: mediawiki
-    restart: always
-    volumes:
-      - /var/www/html/images
-      # - ./LocalSettings.php:/var/www/html/LocalSettings.php
-    ports:
-      - "8080:80"
-    depends_on:
-      - db
-
-  db:
-    image: mariadb
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: 'WikiP@ssw0rd'
-      MYSQL_DATABASE: 'mediawiki'
-      MYSQL_USER: 'wiki'
-      MYSQL_PASSWORD: 'WikiP@ssw0rd'
-    volumes:
-      - dbvolume:/var/lib/mariadb
-
-volumes:
-  dbvolume:
+app:
+conta iner_name: testapp
+image: site: latest
+restart: always
+ports:
+- "8080:8000"
+environment :
+DB_TYPE: "maria"
+DB_HOST: "192.168.0.2"
+DB_PORT: "3306"
+DB_NAME: "testdb"
+DB_USER: "testc"
+DB_PASS: "Pessw0rd"
+depends_on:
+- database
 ```
-
-### Запуск контейнеров
 
 ```bash
-cd /home/user
-docker-compose -f wiki.yml up -d
+docker compose up -d
 ```
 
-### Настройка MediaWiki
-
-1. Зайти с клиента по адресу `http://IP_СЕРВЕРА:8080`
-2. Пройти веб-установку
-3. Скачать файл `LocalSettings.php`
-4. Скопировать файл на сервер:
-   ```bash
-   scp user@192.168.10.10:/home/user/Загрузки/LocalSettings.php /home/user/
-   ```
-5. Раскомментировать строку в `wiki.yml` и перезапустить:
-   ```bash
-   docker-compose -f wiki.yml restart
-   ```
-
-## 2.5 Статическая трансляция на ISP
-
-### Проброс MediaWiki (172.16.4.1:80 > 192.168.10.10:8080)
+## 7. Веб приложение на HQ-SRV
 
 ```bash
-# Перенаправление трафика
-iptables -t nat -A PREROUTING -d 172.16.4.1 -p tcp --dport 80 -j DNAT --to-destination 192.168.10.10:8080
-iptables -A FORWARD -d 192.168.10.10 -p tcp --dport 8080 -j ACCEPT
-iptables -t nat -A POSTROUTING -d 192.168.10.10 -p tcp --dport 8080 -j MASQUERADE
+apt-get install –y lamp-server
+mount /dev/sr0 /mnt/
+cp /mnt/web/index.php /var/www/html
+cp /mnt/web/logo.png /var/www/html
 ```
 
-### Проброс SSH HQ-SRV (172.16.4.1:2024 > 192.168.100.10:2024)
+Файл: `vim /var/www/html/index.php`
 
 ```bash
-iptables -t nat -A PREROUTING -d 172.16.4.1 -p tcp --dport 2024 -j DNAT --to-destination 192.168.100.10:2024
-iptables -A FORWARD -d 192.168.100.10 -p tcp --dport 2024 -j ACCEPT
-iptables -t nat -A POSTROUTING -d 192.168.100.10 -p tcp --dport 2024 -j MASQUERADE
+?php
+Sservername = "localhost";
+Şusername = "webc";
+Spassword = "Pessw0rd";
+Sdbname = "webdb";
+
+Sconn = new mysqli($servername, $username, $password, $dbname);
 ```
 
-### Проброс SSH BR-SRV (172.16.4.1:2025 > 192.168.10.10:2024)
-
 ```bash
-iptables -t nat -A PREROUTING -d 172.16.4.1 -p tcp --dport 2025 -j DNAT --to-destination 192.168.10.10:2024
-iptables -A FORWARD -d 192.168.10.10 -p tcp --dport 2024 -j ACCEPT
-iptables -t nat -A POSTROUTING -d 192.168.10.10 -p tcp --dport 2024 -j MASQUERADE
-```
-
-### Сохранение правил
-
-```bash
-iptables-save > /etc/sysconfig/iptables
-systemctl restart iptables
-```
-
-## 2.6 Moodle
-
-### Установка пакетов
-
-```bash
-apt-get install moodle moodle-apache2 moodle-local-mysql mariadb-server
 systemctl enable --now mariadb
-systemctl enable --now apache2
-```
-
-### Создание базы данных
-
-mysql -u root
-
-```sql
-CREATE DATABASE moodle DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci;
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, CREATE TEMPORARY TABLES, DROP, INDEX, ALTER ON moodle.* TO moodle@localhost IDENTIFIED BY 'P@ssw0rd';
-FLUSH PRIVILEGES;
-quit
+mariadb –u root
+CREATE DATABASE webdb;
+CREATE USER ‘webc’@’localhost’ IDENTIFIED BY ‘P@ssw0rd’;
+GRANT ALL PRIVILEGES ON webdb.* TO ‘webc’@’localhost’ WITH GRANT OPTION;
+EXIT;
 ```
 
 ```bash
-mysqladmin -u root reload
+mariadb –u webc –p –D webdb < /mnt/web/dump.sql
 ```
-
-### Настройка конфигурации
-
-1. Перейти по адресу сервера с клиента и пройти веб-установку
-2. После установки отредактировать файл `/var/www/webapps/moodle/config.php`:
-   - Заменить тип базы данных на `mariadb`
-3. Настроить PHP в файле `/etc/php/8.0/apache2-mod_php/php.ini`
-
-## 2.7 Перенаправление через NGINX
-
-### Установка NGINX
 
 ```bash
-apt-get install nginx
+systemctl enable --now httpd2
 ```
 
-### Создание конфигурации виртуального хоста
+## Обратный прокси NGINX
 
-Файл: `/etc/nginx/sites-available/moodle`
-```nginx
+```bash
+apt-get install -y nginx
+```
+
+Файл: `vim /etc/nginx/sites-available.d/default.conf`
+
+```bash
 server {
-    listen 80;
-    server_name moodle.au-team.irpo;
+listen 80;
+server_name web.au-team. irpo;
 
-    location / {
-        proxy_pass http://192.168.100.10;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+location / {
+proxy_pass http://172.16.1.2:8080;
+proxy_set_header Host Shost;
+proxy_set_header X-Real-IP Sremote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+
+server {
+listen 80;
+server_name docker.au-team. irpo;
+
+location / {
+proxy_pass http://172.16.2.2:8080;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
-### Активация конфигурации
+```bash
+ln -s /etc/nginx/sites-available.d/default.conf /etc/nginx/sites-enabled.d/
+```
 
 ```bash
-ln -s /etc/nginx/sites-available/moodle /etc/nginx/sites-enabled/
 systemctl enable --now nginx
-systemctl reload nginx
+```
+
+## 11. YANDEX ZZZ GOYDA
+
+```bash
+apt-get install –y yandex-browser-stable
 ```
